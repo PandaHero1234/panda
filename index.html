@@ -1,0 +1,178 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow">
+  <title>Panda Docs</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect x='10' y='4' width='44' height='56' rx='6' fill='%231a73e8'/%3E%3Crect x='18' y='18' width='28' height='4' rx='2' fill='white'/%3E%3Crect x='18' y='28' width='28' height='4' rx='2' fill='white'/%3E%3Crect x='18' y='38' width='18' height='4' rx='2' fill='white'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<!-- Sperrbildschirm -->
+<section id="lock" class="lock">
+  <form id="lock-form" class="lock-card" autocomplete="off">
+    <div class="brand"><span class="logo" aria-hidden="true"></span> Panda Docs</div>
+    <h1 id="lock-title">Tresor wird geladen …</h1>
+    <p id="lock-text" class="muted"></p>
+    <label class="field" id="pw-field" hidden>
+      <span>Passwort</span>
+      <input id="pw" type="password" autocomplete="current-password" required>
+    </label>
+    <label class="field" id="pw2-field" hidden>
+      <span>Passwort wiederholen</span>
+      <input id="pw2" type="password" autocomplete="new-password">
+    </label>
+    <p id="lock-error" class="error" role="alert"></p>
+    <button id="lock-btn" class="btn primary" type="submit" hidden>Entsperren</button>
+    <div class="lock-links">
+      <label class="link">Tresor-Datei öffnen …<input id="lock-import" type="file" accept=".json,application/json" hidden></label>
+      <button id="lock-new" class="link" type="button" hidden>Neuen leeren Tresor anlegen</button>
+    </div>
+    <p class="fineprint">🔒 Alles wird nur in deinem Browser ver- und entschlüsselt (AES-256-GCM). Im Repository liegt ausschließlich verschlüsselter Text.</p>
+  </form>
+</section>
+
+<!-- Editor -->
+<div id="app" class="app" hidden>
+  <header class="topbar">
+    <button id="toggle-sidebar" class="icon-btn" title="Dokumentenliste" aria-label="Dokumentenliste">☰</button>
+    <span class="logo" aria-hidden="true"></span>
+    <div class="title-wrap">
+      <input id="doc-title" class="doc-title" placeholder="Unbenanntes Dokument" spellcheck="false">
+      <span id="status" class="status">–</span>
+    </div>
+    <div class="top-actions">
+      <button id="btn-sync" class="btn" title="Mit GitHub synchronisieren (Strg+S)">☁ Speichern</button>
+      <button id="btn-settings" class="icon-btn" title="Einstellungen" aria-label="Einstellungen">⚙</button>
+      <button id="btn-lock" class="btn primary" title="Sperren">🔒 Sperren</button>
+    </div>
+  </header>
+
+  <div class="toolbar" id="toolbar">
+    <button data-cmd="undo" title="Rückgängig (Strg+Z)">↶</button>
+    <button data-cmd="redo" title="Wiederholen (Strg+Y)">↷</button>
+    <button id="btn-print" title="Drucken">🖶</button>
+    <span class="sep"></span>
+    <select id="sel-block" title="Absatzformat">
+      <option value="P">Normaler Text</option>
+      <option value="H1">Überschrift 1</option>
+      <option value="H2">Überschrift 2</option>
+      <option value="H3">Überschrift 3</option>
+      <option value="BLOCKQUOTE">Zitat</option>
+      <option value="PRE">Code</option>
+    </select>
+    <select id="sel-font" title="Schriftart">
+      <option value="Arial">Arial</option>
+      <option value="Georgia">Georgia</option>
+      <option value="Times New Roman">Times New Roman</option>
+      <option value="Verdana">Verdana</option>
+      <option value="Courier New">Courier New</option>
+    </select>
+    <select id="sel-size" title="Schriftgröße">
+      <option value="1">8</option>
+      <option value="2">10</option>
+      <option value="3" selected>12</option>
+      <option value="4">14</option>
+      <option value="5">18</option>
+      <option value="6">24</option>
+      <option value="7">36</option>
+    </select>
+    <span class="sep"></span>
+    <button data-cmd="bold" title="Fett (Strg+B)"><b>F</b></button>
+    <button data-cmd="italic" title="Kursiv (Strg+I)"><i>K</i></button>
+    <button data-cmd="underline" title="Unterstrichen (Strg+U)"><u>U</u></button>
+    <button data-cmd="strikeThrough" title="Durchgestrichen"><s>S</s></button>
+    <label class="color" title="Textfarbe">A<input type="color" id="col-fore" value="#000000"></label>
+    <label class="color hl" title="Hervorheben">🖍<input type="color" id="col-back" value="#fff475"></label>
+    <span class="sep"></span>
+    <button id="btn-link" title="Link einfügen (Strg+K)">🔗</button>
+    <button id="btn-image" title="Bild per URL einfügen">🖼</button>
+    <button id="btn-table" title="Tabelle einfügen">▦</button>
+    <button data-cmd="insertHorizontalRule" title="Trennlinie">―</button>
+    <span class="sep"></span>
+    <button data-cmd="justifyLeft" title="Linksbündig">⯇</button>
+    <button data-cmd="justifyCenter" title="Zentriert">≡</button>
+    <button data-cmd="justifyRight" title="Rechtsbündig">⯈</button>
+    <button data-cmd="justifyFull" title="Blocksatz">☰</button>
+    <span class="sep"></span>
+    <button data-cmd="insertUnorderedList" title="Aufzählung">•≡</button>
+    <button data-cmd="insertOrderedList" title="Nummerierung">1≡</button>
+    <button data-cmd="outdent" title="Einzug verkleinern">⇤</button>
+    <button data-cmd="indent" title="Einzug vergrößern">⇥</button>
+    <button data-cmd="removeFormat" title="Formatierung entfernen">T̸</button>
+  </div>
+
+  <div class="workspace">
+    <aside id="sidebar" class="sidebar">
+      <button id="btn-new" class="btn primary block">＋ Neues Dokument</button>
+      <input id="search" class="search" type="search" placeholder="Dokumente durchsuchen">
+      <ul id="doc-list" class="doc-list"></ul>
+    </aside>
+    <main class="canvas">
+      <article id="page" class="page" contenteditable="true" spellcheck="true"></article>
+    </main>
+  </div>
+  <footer class="footer"><span id="wordcount">0 Wörter</span><span id="repo-info"></span></footer>
+</div>
+
+<!-- Einstellungen -->
+<dialog id="settings" class="dialog">
+  <form method="dialog" class="dialog-body" id="settings-form">
+    <h2>Einstellungen</h2>
+
+    <fieldset>
+      <legend>GitHub-Speicherort</legend>
+      <p class="muted small">Hierhin wird die <b>verschlüsselte</b> Datei gespeichert. Ein
+        <a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener">Fine-grained Token</a>
+        mit Zugriff nur auf dieses Repository und der Berechtigung <i>Contents: Read and write</i> genügt.</p>
+      <div class="grid2">
+        <label class="field"><span>Besitzer</span><input id="cfg-owner" required></label>
+        <label class="field"><span>Repository</span><input id="cfg-repo" required></label>
+        <label class="field"><span>Branch</span><input id="cfg-branch" required></label>
+        <label class="field"><span>Dateipfad</span><input id="cfg-path" required></label>
+      </div>
+      <label class="field"><span>GitHub-Token</span><input id="cfg-token" type="password" placeholder="github_pat_…" autocomplete="off"></label>
+      <p class="muted small">Der Token wird nur verschlüsselt (mit deinem Passwort) im Tresor gespeichert, damit du auf jedem Gerät nach dem Entsperren speichern kannst.</p>
+      <label class="check"><input id="cfg-autosync" type="checkbox"> Automatisch zu GitHub synchronisieren</label>
+      <div class="row">
+        <button type="button" id="btn-test" class="btn">Verbindung testen</button>
+        <span id="test-result" class="small"></span>
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Passwort ändern</legend>
+      <div class="grid2">
+        <label class="field"><span>Neues Passwort</span><input id="new-pw" type="password" autocomplete="new-password"></label>
+        <label class="field"><span>Wiederholen</span><input id="new-pw2" type="password" autocomplete="new-password"></label>
+      </div>
+      <div class="row">
+        <button type="button" id="btn-change-pw" class="btn">Passwort ändern</button>
+        <span id="pw-result" class="small"></span>
+      </div>
+      <p class="muted small">Hinweis: Ältere Versionen bleiben in der Git-Historie – mit dem <i>alten</i> Passwort verschlüsselt.</p>
+    </fieldset>
+
+    <fieldset>
+      <legend>Import / Export</legend>
+      <div class="row wrap">
+        <button type="button" id="btn-export-vault" class="btn">Verschlüsselten Tresor herunterladen</button>
+        <label class="btn">Tresor importieren …<input id="import-vault" type="file" accept=".json,application/json" hidden></label>
+        <button type="button" id="btn-export-html" class="btn">Aktuelles Dokument als HTML (unverschlüsselt)</button>
+      </div>
+    </fieldset>
+
+    <div class="row end">
+      <button value="cancel" class="btn">Abbrechen</button>
+      <button value="ok" id="btn-save-settings" class="btn primary">Übernehmen</button>
+    </div>
+  </form>
+</dialog>
+
+<div id="toast" class="toast" role="status"></div>
+
+<script type="module" src="js/app.js"></script>
+</body>
+</html>
