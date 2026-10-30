@@ -16,6 +16,7 @@ let state = null;
 let currentId = null;
 let remoteSha = null;
 let candidates = [];     // gefundene verschlüsselte Tresore (lokal / Repo / Datei)
+let lockMode = 'unlock'; // unlock | login (neues Gerät) | create
 let saveTimer = null;
 let syncTimer = null;
 let syncRunning = false;
@@ -25,20 +26,24 @@ let lockTimer = null;
 
 // ---------- Repository-Konfiguration (nicht geheim, liegt im Klartext lokal) ----------
 
+// Die Daten liegen in einem eigenen, privaten Repository: <App-Repo>-data.
 function defaultRepo() {
-  const cfg = { owner: 'PandaHero1234', repo: 'panda', branch: 'main', path: 'data/vault.json' };
+  const cfg = { owner: 'PandaHero1234', repo: 'panda-data', branch: '', path: 'vault.json' };
   const host = location.hostname;
   if (host.endsWith('.github.io')) {
     cfg.owner = host.split('.')[0];
     const first = location.pathname.split('/').filter(Boolean)[0];
-    cfg.repo = first && !first.includes('.') ? first : host;
+    if (first && !first.includes('.')) cfg.repo = first + '-data';
   }
   return cfg;
 }
 
 function loadRepo() {
   try {
-    return { ...defaultRepo(), ...JSON.parse(localStorage.getItem(LS_REPO) || '{}') };
+    const saved = JSON.parse(localStorage.getItem(LS_REPO) || '{}');
+    // Frühere Standardeinstellung (Tresor im öffentlichen App-Repo) auf das private Repo umstellen.
+    if (saved.repo === 'panda' && saved.path === 'data/vault.json') return defaultRepo();
+    return { ...defaultRepo(), ...saved };
   } catch {
     return defaultRepo();
   }
@@ -158,55 +163,63 @@ function readLocalVault() {
   }
 }
 
-async function readRemoteVault() {
-  // 1. GitHub-API (immer aktuell, liefert die SHA für späteres Speichern)
-  try {
-    const res = await GH.fetchVault(repo);
-    if (res && V.isVault(res.vault)) {
-      remoteSha = res.sha;
-      return res.vault;
-    }
-  } catch (e) {
-    console.warn('GitHub-API nicht erreichbar:', e.message);
-  }
-  // 2. Fallback: Datei relativ zur Seite (z. B. GitHub Pages oder lokaler Server)
-  try {
-    const res = await fetch(repo.path, { cache: 'no-store' });
-    if (res.ok) {
-      const v = await res.json();
-      if (V.isVault(v)) return v;
-    }
-  } catch { /* keine Datei vorhanden */ }
-  return null;
-}
-
+// Der Tresor im privaten Repo ist ohne Token nicht abrufbar. Vor dem Entsperren
+// gibt es daher nur den verschlüsselten Stand im Browser; auf einem neuen Gerät
+// wird der Token einmalig auf dem Sperrbildschirm eingegeben.
 async function boot() {
   const local = readLocalVault();
-  const remote = await readRemoteVault();
-  candidates = [local && { vault: local, source: 'Browser' }, remote && { vault: remote, source: 'Repository' }]
-    .filter(Boolean)
-    .sort((a, b) => b.vault.updated - a.vault.updated);
-  showLock();
+  candidates = local ? [{ vault: local, source: 'Browser' }] : [];
+  showLock(candidates.length ? 'unlock' : 'login');
 }
 
-function showLock(error = '') {
-  const hasVault = candidates.length > 0;
-  $('#lock-title').textContent = hasVault ? 'Dokumente entsperren' : 'Neuen Tresor anlegen';
-  $('#lock-text').textContent = hasVault
-    ? `Verschlüsselter Tresor gefunden (${candidates.map(c => c.source).join(' + ')}, Stand ${new Date(candidates[0].vault.updated).toLocaleString('de-DE')}).`
-    : `Lege ein Passwort fest (mind. ${MIN_PASSWORD} Zeichen). Ohne dieses Passwort kann niemand – auch du nicht – die Dokumente lesen. Es gibt keine Wiederherstellung!`;
+const repoLabel = () => `${repo.owner}/${repo.repo}/${repo.path}`;
+
+function showLock(mode = lockMode, error = '') {
+  lockMode = mode;
+  const texts = {
+    unlock: ['Dokumente entsperren',
+      `Verschlüsselter Tresor gefunden (${candidates.map(c => c.source).join(' + ')}, Stand ${candidates[0] ? new Date(candidates[0].vault.updated).toLocaleString('de-DE') : ''}). Der neueste Stand wird nach dem Entsperren aus dem privaten Repository geladen.`,
+      'Entsperren', 'Neuen leeren Tresor anlegen'],
+    login: ['Anmelden',
+      'Auf diesem Gerät ist noch kein Tresor gespeichert. Gib dein Passwort und einen GitHub-Token für das private Daten-Repository ein – der Token wird danach verschlüsselt gespeichert.',
+      'Tresor laden', 'Neuen Tresor anlegen'],
+    create: ['Neuen Tresor anlegen',
+      `Lege ein Passwort fest (mind. ${MIN_PASSWORD} Zeichen). Ohne dieses Passwort kann niemand – auch du nicht – die Dokumente lesen. Es gibt keine Wiederherstellung! Mit Token wird der Tresor verschlüsselt im privaten Repository gespeichert.`,
+      'Tresor erstellen', 'Vorhandenen Tresor laden']
+  }[mode];
+  $('#lock-title').textContent = texts[0];
+  $('#lock-text').textContent = texts[1];
+  $('#lock-btn').textContent = texts[2];
+  $('#lock-mode').textContent = texts[3];
   $('#pw-field').hidden = false;
-  $('#pw2-field').hidden = hasVault;
-  $('#pw2').required = !hasVault;
-  $('#pw').autocomplete = hasVault ? 'current-password' : 'new-password';
+  $('#pw2-field').hidden = mode !== 'create';
+  $('#pw2').required = mode === 'create';
+  $('#pw').autocomplete = mode === 'create' ? 'new-password' : 'current-password';
+  $('#token-field').hidden = mode === 'unlock';
+  $('#lock-token').required = mode === 'login';
+  $('#lock-location').hidden = mode === 'unlock';
+  $('#lock-owner').value = repo.owner;
+  $('#lock-repo').value = repo.repo;
+  $('#lock-branch').value = repo.branch;
+  $('#lock-path').value = repo.path;
+  $('#lock-location-label').textContent = repoLabel();
   $('#lock-btn').hidden = false;
   $('#lock-btn').disabled = false;
-  $('#lock-btn').textContent = hasVault ? 'Entsperren' : 'Tresor erstellen';
-  $('#lock-new').hidden = !hasVault;
+  $('#lock-mode').hidden = false;
   $('#lock-error').textContent = error;
   $('#lock').hidden = false;
   $('#app').hidden = true;
   $('#pw').focus();
+}
+
+function readLockRepo() {
+  repo = {
+    owner: $('#lock-owner').value.trim() || repo.owner,
+    repo: $('#lock-repo').value.trim() || repo.repo,
+    branch: $('#lock-branch').value.trim(),
+    path: $('#lock-path').value.trim().replace(/^\/+/, '') || repo.path
+  };
+  localStorage.setItem(LS_REPO, JSON.stringify(repo));
 }
 
 async function onLockSubmit(e) {
@@ -218,9 +231,10 @@ async function onLockSubmit(e) {
   const label = btn.textContent;
   btn.textContent = 'Bitte warten …';
   try {
-    if (candidates.length) await unlock(pw);
-    else await createVault(pw, $('#pw2').value);
-    $('#pw').value = $('#pw2').value = '';
+    if (lockMode === 'unlock') await unlock(pw);
+    else if (lockMode === 'login') await login(pw, $('#lock-token').value.trim());
+    else await createVault(pw, $('#pw2').value, $('#lock-token').value.trim());
+    $('#pw').value = $('#pw2').value = $('#lock-token').value = '';
     enterApp();
   } catch (err) {
     $('#lock-error').textContent = err.message;
@@ -256,7 +270,10 @@ async function unlock(pw) {
         }
       }
     } catch (err) {
+      // z. B. anderes Passwort im Repo: nichts überschreiben, beim Sync erneut prüfen.
+      remoteSha = null;
       console.warn(err);
+      toast('Stand im Repository konnte nicht geladen werden: ' + err.message, 5000);
     }
   }
   const needsSync = candidates.length > 1 || first.source !== 'Repository';
@@ -264,13 +281,60 @@ async function unlock(pw) {
   if (needsSync) scheduleSync(500);
 }
 
-async function createVault(pw, pw2) {
+function tokenError(err) {
+  if (err.status === 401) return new Error('Der GitHub-Token ist ungültig oder abgelaufen.');
+  if (err.status === 403) return new Error('Der Token hat keinen Zugriff auf ' + repoLabel() + '.');
+  return new Error('GitHub: ' + err.message);
+}
+
+// Neues Gerät: Tresor mit dem Token aus dem privaten Repository holen.
+async function login(pw, token) {
+  if (!token) throw new Error('Bitte einen GitHub-Token eingeben.');
+  readLockRepo();
+  let res;
+  try {
+    res = await GH.fetchVault({ ...repo, token });
+  } catch (err) {
+    throw tokenError(err);
+  }
+  if (!res) {
+    throw new Error(`Kein Tresor unter ${repoLabel()} gefunden (oder der Token hat keinen Zugriff). Prüfe den Speicherort oder lege einen neuen Tresor an.`);
+  }
+  if (!V.isVault(res.vault)) throw new Error('Die Datei im Repository ist kein Panda-Docs-Tresor.');
+  remoteSha = res.sha;
+  candidates = [{ vault: res.vault, source: 'Repository' }];
+  keyInfo = await V.keyForVault(pw, res.vault);
+  state = normalizeState(await V.decryptVault(res.vault, keyInfo));
+  if (state.settings.token !== token) {
+    state.settings.token = token;
+    await persistLocal();
+    scheduleSync(500);
+  } else {
+    await persistLocal();
+    dirtySinceSync = false;
+  }
+}
+
+async function createVault(pw, pw2, token) {
   if (pw.length < MIN_PASSWORD) throw new Error(`Das Passwort braucht mindestens ${MIN_PASSWORD} Zeichen.`);
   if (pw !== pw2) throw new Error('Die Passwörter stimmen nicht überein.');
+  readLockRepo();
+  if (token) {
+    let res;
+    try {
+      res = await GH.fetchVault({ ...repo, token });
+    } catch (err) {
+      throw tokenError(err);
+    }
+    if (res) throw new Error(`Unter ${repoLabel()} liegt bereits ein Tresor. Wähle „Vorhandenen Tresor laden“ oder einen anderen Dateipfad.`);
+    remoteSha = undefined;
+  }
   keyInfo = await V.createKey(pw);
   state = emptyState();
+  state.settings.token = token;
   state.docs.push(welcomeDoc());
   await persistLocal();
+  if (token) scheduleSync(500);
 }
 
 function welcomeDoc() {
@@ -279,11 +343,9 @@ function welcomeDoc() {
     id: newId(), title: 'Willkommen bei Panda Docs', created: now, updated: now,
     html: `<h1>Willkommen 🐼</h1>
 <p>Dies ist dein verschlüsselter Dokumenten-Editor. Alles, was du hier schreibst, wird <b>in deinem Browser</b> mit deinem Passwort verschlüsselt (AES-256-GCM).</p>
-<h2>Speichern im Repository</h2>
-<ol><li>Öffne die <b>Einstellungen</b> (⚙ oben rechts).</li>
-<li>Trage einen GitHub-Token mit Schreibrecht auf <i>Contents</i> für dieses Repository ein.</li>
-<li>Ab dann wird automatisch eine verschlüsselte Datei <code>data/vault.json</code> ins Repo geschrieben.</li></ol>
-<p>Auch wenn das Repository öffentlich ist, sieht dort jeder nur unlesbaren Datensalat.</p>
+<h2>Speichern im privaten Repository</h2>
+<p>Ist ein GitHub-Token eingetragen (⚙ oben rechts), wird jede Änderung automatisch als verschlüsselte Datei in dein <b>privates</b> Daten-Repository geschrieben. Der öffentliche Code enthält keine Daten – und selbst im privaten Repo liegt nur unlesbarer Datensalat.</p>
+<p>Auf einem neuen Gerät meldest du dich mit Passwort und Token an.</p>
 <blockquote>Wichtig: Wenn du das Passwort vergisst, sind die Dokumente unwiederbringlich verloren.</blockquote>`
   };
 }
@@ -340,7 +402,7 @@ async function sync({ manual = false } = {}) {
       if (remoteSha === null || attempt > 0) {
         const res = await GH.fetchVault(cfg);
         remoteSha = res ? res.sha : undefined;
-        if (res && attempt > 0) await mergeRemote(res.vault);
+        if (res) await mergeRemote(res.vault);
       }
       const vault = await persistLocal();
       try {
@@ -559,8 +621,8 @@ function readSettingsForm() {
     repo: {
       owner: $('#cfg-owner').value.trim(),
       repo: $('#cfg-repo').value.trim(),
-      branch: $('#cfg-branch').value.trim() || 'main',
-      path: $('#cfg-path').value.trim().replace(/^\/+/, '') || 'data/vault.json'
+      branch: $('#cfg-branch').value.trim(),
+      path: $('#cfg-path').value.trim().replace(/^\/+/, '') || 'vault.json'
     },
     token: $('#cfg-token').value.trim(),
     autosync: $('#cfg-autosync').checked
@@ -642,7 +704,7 @@ async function importVaultFile(file, beforeUnlock) {
   if (beforeUnlock) {
     candidates = [{ vault, source: 'Datei ' + file.name }, ...candidates]
       .sort((a, b) => b.vault.updated - a.vault.updated);
-    showLock();
+    showLock('unlock');
     return;
   }
   try {
@@ -670,12 +732,22 @@ function bind() {
     if (e.target.files[0]) importVaultFile(e.target.files[0], true);
     e.target.value = '';
   });
-  $('#lock-new').addEventListener('click', () => {
-    if (!confirm('Einen neuen, leeren Tresor anlegen? Beim ersten Speichern wird der bisherige verschlüsselte Stand im Repository ersetzt (er bleibt in der Git-Historie).')) return;
-    candidates = [];
-    localStorage.removeItem(LS_VAULT);
-    showLock();
+  $('#lock-mode').addEventListener('click', () => {
+    if (lockMode === 'unlock') {
+      if (!confirm('Den im Browser gespeicherten Tresor entfernen und neu beginnen? Der Stand im privaten Repository bleibt erhalten und kann danach mit Passwort und Token geladen werden.')) return;
+      candidates = [];
+      localStorage.removeItem(LS_VAULT);
+      showLock('create');
+    } else {
+      showLock(lockMode === 'login' ? 'create' : 'login');
+    }
   });
+  for (const id of ['#lock-owner', '#lock-repo', '#lock-path']) {
+    $(id).addEventListener('input', () => {
+      $('#lock-location-label').textContent =
+        `${$('#lock-owner').value.trim()}/${$('#lock-repo').value.trim()}/${$('#lock-path').value.trim()}`;
+    });
+  }
 
   const page = $('#page');
   page.addEventListener('input', onEdit);
@@ -795,5 +867,5 @@ bind();
 boot().catch(err => {
   console.error(err);
   candidates = [];
-  showLock('Fehler beim Laden: ' + err.message);
+  showLock('login', 'Fehler beim Laden: ' + err.message);
 });

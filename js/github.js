@@ -38,9 +38,14 @@ async function failure(res) {
   return err;
 }
 
-// Liefert { vault, sha } oder null, wenn die Datei noch nicht existiert.
+// Leerer Branch = Standard-Branch des Repositorys (funktioniert auch bei leeren Repos).
+function refQuery(cfg) {
+  return cfg.branch ? '?ref=' + encodeURIComponent(cfg.branch) : '';
+}
+
+// Liefert { vault, sha } oder null, wenn die Datei (oder das Repo) nicht gefunden wurde.
 export async function fetchVault(cfg) {
-  const res = await fetch(contentsUrl(cfg) + '?ref=' + encodeURIComponent(cfg.branch), {
+  const res = await fetch(contentsUrl(cfg) + refQuery(cfg), {
     headers: headers(cfg.token),
     cache: 'no-store'
   });
@@ -52,7 +57,7 @@ export async function fetchVault(cfg) {
     text = base64ToUtf8(body.content);
   } else {
     // Dateien > 1 MB liefert die API ohne Inhalt – dann per raw-Medientyp nachladen.
-    const raw = await fetch(contentsUrl(cfg) + '?ref=' + encodeURIComponent(cfg.branch), {
+    const raw = await fetch(contentsUrl(cfg) + refQuery(cfg), {
       headers: { ...headers(cfg.token), Accept: 'application/vnd.github.raw' },
       cache: 'no-store'
     });
@@ -69,7 +74,7 @@ export async function saveVault(cfg, vault, sha) {
     body: JSON.stringify({
       message: 'Verschlüsselte Dokumente aktualisiert',
       content: utf8ToBase64(JSON.stringify(vault, null, 2) + '\n'),
-      branch: cfg.branch,
+      ...(cfg.branch ? { branch: cfg.branch } : {}),
       ...(sha ? { sha } : {})
     })
   });

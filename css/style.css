@@ -201,3 +201,7 @@ legend { padding: 0 6px; font-weight: 600; }
   .canvas { overflow: visible; padding: 0; }
   .page { box-shadow: none; padding: 0; max-width: none; min-height: 0; }
 }
+
+.location { margin: 6px 0 2px; font-size: 13px; }
+.location summary { cursor: pointer; color: var(--muted); }
+.location summary span { color: var(--text); font-family: ui-monospace, monospace; font-size: 12px; }

@@ -1,8 +1,16 @@
 # 🐼 Panda Docs
 
 Ein kleiner Google-Docs-Klon, dessen Inhalt mit einem **Passwort verschlüsselt** ist.
-Das Repository kann öffentlich sein: Im Repo liegt nur verschlüsselter Datensalat
-(`data/vault.json`). Ohne Passwort kann niemand die Dokumente lesen.
+
+Code und Daten sind getrennt:
+
+| Repository | Sichtbarkeit | Inhalt |
+| --- | --- | --- |
+| `panda` | öffentlich | nur der Code der App (läuft über GitHub Pages) |
+| `panda-data` | **privat** | nur die verschlüsselte Datei `vault.json` |
+
+Selbst wer Zugriff auf das private Repo bekäme, sähe nur unlesbaren Datensalat.
+Ohne Passwort kann niemand die Dokumente lesen.
 
 ## Funktionen
 
@@ -17,42 +25,54 @@ Das Repository kann öffentlich sein: Im Repo liegt nur verschlüsselter Datensa
 
 ```
 Passwort ──PBKDF2-SHA256 (600 000 Runden, zufälliges Salt)──▶ 256-Bit-Schlüssel
-Dokumente (JSON) ──AES-256-GCM (zufälliger IV pro Speichern)──▶ data/vault.json
+Dokumente (JSON) ──AES-256-GCM (zufälliger IV pro Speichern)──▶ panda-data/vault.json
 ```
 
 - Ver- und Entschlüsselung passieren **ausschließlich im Browser** (WebCrypto-API).
   Das Passwort wird nirgends gespeichert oder übertragen.
-- In `data/vault.json` stehen nur Salt, IV, der Zeitpunkt der letzten Änderung
+- In `vault.json` stehen nur Salt, IV, der Zeitpunkt der letzten Änderung
   und der Geheimtext. Titel, Inhalte und Anzahl der Dokumente sind nicht lesbar.
 - AES-GCM erkennt Manipulationen: Eine veränderte Datei lässt sich nicht entschlüsseln.
 
+**Zwei Schutzschichten**
+
+1. **Privates Repository:** Fremde kommen gar nicht erst an die verschlüsselte Datei,
+   können also auch keine Passwörter offline durchprobieren. Alte Versionen und
+   Metadaten (wann du schreibst) bleiben ebenfalls privat. Schalte für dein
+   GitHub-Konto unbedingt die Zwei-Faktor-Anmeldung ein.
+2. **Verschlüsselung:** Falls das private Repo doch einmal offenliegt (Konto gehackt,
+   versehentlich öffentlich gemacht), schützt weiterhin das Passwort.
+
 **Wichtig**
 
-- Die Sicherheit hängt an der **Stärke deines Passworts**. Jeder kann die Datei aus dem
-  öffentlichen Repo herunterladen und offline Passwörter durchprobieren. Nimm deshalb
-  eine lange Passphrase (z. B. 4–5 zufällige Wörter).
+- Nimm trotzdem ein starkes Passwort (z. B. 4–5 zufällige Wörter) – es ist die
+  letzte Verteidigungslinie.
 - **Passwort vergessen = Daten weg.** Es gibt keine Hintertür.
 - Git vergisst nichts: Alte Versionen der Datei bleiben in der Historie, verschlüsselt mit
   dem damals gültigen Passwort. Ein Passwortwechsel sperrt also niemanden aus, der das
   alte Passwort schon kannte.
-- Der GitHub-Token wird mit im Tresor gespeichert (also ebenfalls verschlüsselt), damit
-  du nach dem Entsperren auf jedem Gerät speichern kannst.
+- Der GitHub-Token wird mit im Tresor gespeichert (also ebenfalls verschlüsselt). Auf einem
+  **neuen Gerät** gibst du ihn einmal zusammen mit dem Passwort auf dem Anmeldebildschirm
+  ein; danach reicht das Passwort.
 
 ## Einrichtung
 
-1. **GitHub Pages einschalten:** Repository → *Settings* → *Pages* → *Source: Deploy from a branch*,
-   Branch `main`, Ordner `/ (root)`. Die App ist dann unter
+1. **Privates Daten-Repo anlegen:** `panda-data`, Sichtbarkeit *Private* (darf leer sein).
+2. **GitHub Pages für `panda` einschalten:** Repository → *Settings* → *Pages* →
+   *Source: Deploy from a branch*, Branch `main`, Ordner `/ (root)`. Die App ist dann unter
    `https://pandahero1234.github.io/panda/` erreichbar.
-2. Seite öffnen und ein **Passwort festlegen** → der Tresor wird angelegt.
-3. **Token anlegen**, damit die App ins Repo schreiben darf:
+3. **Token anlegen**, damit die App die Daten lesen und schreiben darf:
    [Fine-grained Token erstellen](https://github.com/settings/personal-access-tokens/new) →
-   *Only select repositories*: `panda` → *Repository permissions* → *Contents: Read and write*.
-4. In der App auf ⚙ klicken, Token eintragen, *Übernehmen*. Ab jetzt wird jede Änderung
-   automatisch als verschlüsselter Commit in `data/vault.json` gespeichert.
+   *Repository access: Only select repositories* → **`panda-data`** →
+   *Repository permissions* → *Contents: Read and write*. Ein Ablaufdatum ist sinnvoll;
+   einen neuen Token trägst du später unter ⚙ ein.
+4. App öffnen → *Neuen Tresor anlegen* → Passwort (2×) und Token eingeben. Ab jetzt wird jede
+   Änderung automatisch als verschlüsselter Commit in `panda-data/vault.json` gespeichert.
+5. Auf weiteren Geräten: App öffnen → Passwort + Token eingeben → *Tresor laden*.
 
-Ohne Token funktioniert die App auch – dann liegen die Dokumente nur (verschlüsselt) im
-`localStorage` des Browsers. Über ⚙ → *Verschlüsselten Tresor herunterladen* kann man die
-Datei auch von Hand ins Repo legen.
+Der Speicherort (Besitzer, Repository, Branch, Pfad) lässt sich auf dem Anmeldebildschirm
+unter „Speicherort“ und in der App unter ⚙ ändern. Ohne Token funktioniert die App auch –
+dann liegen die Dokumente nur (verschlüsselt) im `localStorage` des Browsers.
 
 ## Lokal starten
 
@@ -77,4 +97,4 @@ npm test
 | `js/vault.js` | Verschlüsselung (PBKDF2 + AES-256-GCM) |
 | `js/github.js` | Lesen/Schreiben der Tresor-Datei über die GitHub-API |
 | `js/store.js` | Datenmodell und Zusammenführen von Ständen |
-| `data/vault.json` | Der verschlüsselte Tresor (entsteht beim ersten Speichern) |
+| `panda-data/vault.json` | Der verschlüsselte Tresor (im privaten Repo, entsteht beim ersten Speichern) |

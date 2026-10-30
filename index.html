@@ -24,13 +24,26 @@
       <span>Passwort wiederholen</span>
       <input id="pw2" type="password" autocomplete="new-password">
     </label>
+    <label class="field" id="token-field" hidden>
+      <span>GitHub-Token (Zugriff auf das private Daten-Repo)</span>
+      <input id="lock-token" type="password" placeholder="github_pat_…" autocomplete="off">
+    </label>
+    <details id="lock-location" class="location" hidden>
+      <summary>Speicherort: <span id="lock-location-label"></span></summary>
+      <div class="grid2">
+        <label class="field"><span>Besitzer</span><input id="lock-owner"></label>
+        <label class="field"><span>Privates Repository</span><input id="lock-repo"></label>
+        <label class="field"><span>Branch (leer = Standard)</span><input id="lock-branch"></label>
+        <label class="field"><span>Dateipfad</span><input id="lock-path"></label>
+      </div>
+    </details>
     <p id="lock-error" class="error" role="alert"></p>
     <button id="lock-btn" class="btn primary" type="submit" hidden>Entsperren</button>
     <div class="lock-links">
       <label class="link">Tresor-Datei öffnen …<input id="lock-import" type="file" accept=".json,application/json" hidden></label>
-      <button id="lock-new" class="link" type="button" hidden>Neuen leeren Tresor anlegen</button>
+      <button id="lock-mode" class="link" type="button" hidden></button>
     </div>
-    <p class="fineprint">🔒 Alles wird nur in deinem Browser ver- und entschlüsselt (AES-256-GCM). Im Repository liegt ausschließlich verschlüsselter Text.</p>
+    <p class="fineprint">🔒 Alles wird nur in deinem Browser ver- und entschlüsselt (AES-256-GCM). Die verschlüsselte Datei liegt in einem <b>privaten</b> Repository – der öffentliche Code enthält keine Daten.</p>
   </form>
 </section>
 
@@ -124,13 +137,13 @@
 
     <fieldset>
       <legend>GitHub-Speicherort</legend>
-      <p class="muted small">Hierhin wird die <b>verschlüsselte</b> Datei gespeichert. Ein
+      <p class="muted small">Hierhin wird die <b>verschlüsselte</b> Datei gespeichert – am besten ein <b>privates</b> Repository. Ein
         <a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener">Fine-grained Token</a>
         mit Zugriff nur auf dieses Repository und der Berechtigung <i>Contents: Read and write</i> genügt.</p>
       <div class="grid2">
         <label class="field"><span>Besitzer</span><input id="cfg-owner" required></label>
         <label class="field"><span>Repository</span><input id="cfg-repo" required></label>
-        <label class="field"><span>Branch</span><input id="cfg-branch" required></label>
+        <label class="field"><span>Branch (leer = Standard)</span><input id="cfg-branch"></label>
         <label class="field"><span>Dateipfad</span><input id="cfg-path" required></label>
       </div>
       <label class="field"><span>GitHub-Token</span><input id="cfg-token" type="password" placeholder="github_pat_…" autocomplete="off"></label>
